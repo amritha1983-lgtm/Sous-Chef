@@ -69,18 +69,32 @@ def get_video_data(url):
     except Exception as e:
         print(f"yt-dlp failed (likely bot block), trying fallback: {e}")
         
-        # Fallback: Simple HTTP request to get title/description
+            # Fallback: Simple HTTP request to get title/description
         try:
-            headers = {'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36'}
+            headers = {
+                'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/121.0.0.0 Safari/537.36',
+                'Accept-Language': 'en-US,en;q=0.9',
+            }
             response = requests.get(url, headers=headers, timeout=10)
             html = response.text
             
-            title = re.search(r'<title>(.*?)</title>', html)
-            title_str = title.group(1).replace(' - YouTube', '') if title else "Untitled"
+            # Extract Title
+            title_match = re.search(r'<title>(.*?)</title>', html)
+            title_str = title_match.group(1).replace(' - YouTube', '') if title_match else "Untitled"
             
-            # Very basic description search in HTML metadata
-            desc = re.search(r'name="description" content="(.*?)"', html)
-            desc_str = desc.group(1) if desc else "Could not extract description."
+            # Extract Description (Try multiple patterns)
+            desc_str = "Could not extract description."
+            
+            # Pattern 1: Meta tag
+            desc_match = re.search(r'name="description" content="(.*?)"', html)
+            if desc_match:
+                desc_str = desc_match.group(1)
+            else:
+                # Pattern 2: shortDescription in ytInitialData JSON
+                desc_match = re.search(r'"shortDescription":"(.*?)"', html)
+                if desc_match:
+                    # Clean up escaped characters
+                    desc_str = desc_match.group(1).encode().decode('unicode_escape')
             
             return {
                 'title': title_str,
@@ -96,58 +110,49 @@ def get_video_data(url):
 
 def extract_recipe_with_gemini(video_data):
     """Uses Gemini to extract a structured recipe from video data."""
-    model = genai.GenerativeModel('gemini-3-flash-preview')
+    model = genai.GenerativeModel('gemini-1.5-flash')
     
-    # Combine description and transcript for better context
     source_type = video_data.get('source', 'Video')
-    context = f"Source: {source_type}\nTitle: {video_data['title']}\n\nDescription/Caption:\n{video_data['description']}"
+    title = video_data.get('title', 'Untitled Recipe')
+    description = video_data.get('description', '')
     
-    if video_data.get('transcript'):
-        # Clean up VTT/SRT tags if present for better Gemini readability
-        import re
-        clean_transcript = re.sub(r'\d{2}:\d{2}:\d{2}.\d{3} --> \d{2}:\d{2}:\d{2}.\d{3}.*\n', '', video_data['transcript'])
-        clean_transcript = re.sub(r'<[^>]*>', '', clean_transcript)
-        context += f"\n\nTranscript:\n{clean_transcript[:10000]}" # Limit context size
-    else:
-        context += f"\n\n(No transcript available, please extract strictly from the title and caption/description provided above. For {source_type} reels, the recipe is usually in the caption.)"
+    context = f"Source: {source_type}\nTitle: {title}\n\nDescription/Caption:\n{description}"
     
     prompt = f"""
-    You are a professional chef and data extractor. 
-    Below is the information from a {source_type} cooking post. 
-    Please extract the recipe and return it as a VALID JSON object.
+    You are a professional chef. Extract the recipe from the following {source_type} content.
     
     {context}
     
-    The JSON structure MUST follow this schema:
+    IMPORTANT: Return ONLY a valid JSON object with this EXACT structure:
     {{
-        "title": "Recipe Title",
-        "ingredients": ["quantity + unit + item", ...],
-        "instructions": ["step 1", "step 2", ...],
-        "prep_time": "e.g., 15 mins",
-        "cook_time": "e.g., 30 mins",
-        "servings": "e.g., 4 people"
+        "title": "Clear Recipe Name",
+        "ingredients": ["1 cup flour", "2 eggs", "..."],
+        "instructions": ["Step 1...", "Step 2...", "..."],
+        "prep_time": "10 mins",
+        "cook_time": "20 mins",
+        "servings": "2-4 people"
     }}
     
-    If any field is missing, use "N/A" or estimate based on context.
-    Return ONLY the JSON.
+    If data is missing, make a professional estimate based on the recipe type.
+    Do not include any markdown or text outside the JSON.
     """
     
     try:
         response = model.generate_content(prompt)
         content = response.text.strip()
         
-        # Clean up markdown if Gemini wraps it
+        # Robust JSON cleaning
         if "```json" in content:
             content = content.split("```json")[1].split("```")[0].strip()
         elif "```" in content:
-            # Fallback for generic code blocks
-            lines = content.split('\n')
-            if lines[0].startswith('```'):
-                content = '\n'.join(lines[1:-1]).strip()
+            content = content.split("```")[1].split("```")[0].strip()
+        
+        # Final cleanup for any trailing characters
+        content = content[content.find('{'):content.rfind('}')+1]
             
         return json.loads(content)
     except Exception as e:
-        print(f"Error extracting recipe with Gemini: {e}")
+        print(f"Gemini error: {e}")
         return None
 
 def main():
