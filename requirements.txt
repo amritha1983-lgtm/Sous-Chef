@@ -1,0 +1,7 @@
+yt-dlp
+google-generativeai
+python-dotenv
+pydantic
+fastapi
+uvicorn
+gunicorn
