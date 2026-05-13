@@ -58,16 +58,19 @@ def get_video_data(url):
             video_id = info.get('id')
             
             transcript = ""
-            if 'requested_subtitles' in info and 'en' in info['requested_subtitles']:
-                # For simplicity, we just take the first subtitle file found
-                sub_url = info['requested_subtitles']['en']['url']
-                try:
-                    import requests
-                    sub_response = requests.get(sub_url)
+            try:
+                if 'requested_subtitles' in info and 'en' in info['requested_subtitles']:
+                    sub_url = info['requested_subtitles']['en']['url']
+                    print(f"DEBUG: Found subtitles at {sub_url[:50]}...")
+                    sub_response = requests.get(sub_url, timeout=5)
                     transcript = sub_response.text
-                    # Basic cleaning of VTT format if needed
-                except:
-                    pass
+                elif 'subtitles' in info and 'en' in info['subtitles']:
+                    # Fallback to general subtitles list
+                    sub_url = info['subtitles']['en'][0]['url']
+                    sub_response = requests.get(sub_url, timeout=5)
+                    transcript = sub_response.text
+            except Exception as sub_e:
+                print(f"DEBUG: Subtitle extraction failed: {sub_e}")
             
             return {
                 'title': info.get('title') or 'Untitled',
