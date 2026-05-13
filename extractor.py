@@ -25,6 +25,7 @@ class Recipe(BaseModel):
     prep_time: Optional[str] = Field(description="Preparation time")
     cook_time: Optional[str] = Field(description="Cooking time")
     servings: Optional[str] = Field(description="Number of servings")
+    image: Optional[str] = Field(description="Thumbnail URL of the video")
 
 def get_video_data(url):
     """Extracts metadata and transcript from YouTube or Instagram video."""
@@ -64,6 +65,7 @@ def get_video_data(url):
                 'transcript': transcript,
                 'uploader': info.get('uploader') or 'Unknown',
                 'url': url,
+                'thumbnail': info.get('thumbnail'),
                 'source': 'Instagram' if is_instagram else 'YouTube'
             }
     except Exception as e:
@@ -96,12 +98,17 @@ def get_video_data(url):
                     # Clean up escaped characters
                     desc_str = desc_match.group(1).encode().decode('unicode_escape')
             
+            # Extract Thumbnail
+            thumb_match = re.search(r'property="og:image" content="(.*?)"', html)
+            thumb_url = thumb_match.group(1) if thumb_match else None
+            
             return {
                 'title': title_str,
                 'description': desc_str,
                 'transcript': "",
                 'uploader': "Unknown",
                 'url': url,
+                'thumbnail': thumb_url,
                 'source': 'Instagram' if is_instagram else 'YouTube'
             }
         except Exception as fallback_e:
@@ -110,7 +117,7 @@ def get_video_data(url):
 
 def extract_recipe_with_gemini(video_data):
     """Uses Gemini to extract a structured recipe from video data."""
-    model = genai.GenerativeModel('gemini-1.5-flash')
+    model = genai.GenerativeModel('gemini-3-flash-preview')
     
     source_type = video_data.get('source', 'Video')
     title = video_data.get('title', 'Untitled Recipe')
@@ -150,7 +157,12 @@ def extract_recipe_with_gemini(video_data):
         # Final cleanup for any trailing characters
         content = content[content.find('{'):content.rfind('}')+1]
             
-        return json.loads(content)
+        recipe_json = json.loads(content)
+        # Add thumbnail from video data if not present in Gemini output
+        if 'image' not in recipe_json or not recipe_json['image']:
+            recipe_json['image'] = video_data.get('thumbnail')
+            
+        return recipe_json
     except Exception as e:
         print(f"Gemini error: {e}")
         return None
