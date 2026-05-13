@@ -58,7 +58,16 @@ def get_video_data(url):
             video_id = info.get('id')
             
             transcript = ""
-            # Subtitle extraction logic... (simplified for brevity)
+            if 'requested_subtitles' in info and 'en' in info['requested_subtitles']:
+                # For simplicity, we just take the first subtitle file found
+                sub_url = info['requested_subtitles']['en']['url']
+                try:
+                    import requests
+                    sub_response = requests.get(sub_url)
+                    transcript = sub_response.text
+                    # Basic cleaning of VTT format if needed
+                except:
+                    pass
             
             return {
                 'title': info.get('title') or 'Untitled',
@@ -131,8 +140,9 @@ def extract_recipe_with_gemini(video_data):
     source_type = video_data.get('source', 'Video')
     title = video_data.get('title', 'Untitled Recipe')
     description = video_data.get('description', '')
+    transcript = video_data.get('transcript', '')
     
-    context = f"Source: {source_type}\nTitle: {title}\n\nDescription/Caption:\n{description}"
+    context = f"Source: {source_type}\nTitle: {title}\n\nDescription/Caption:\n{description}\n\nTranscript Content:\n{transcript}"
     
     prompt = f"""
     You are a professional chef. Extract the EXACT recipe details from the provided {source_type} content.
