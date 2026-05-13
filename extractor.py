@@ -87,41 +87,46 @@ def get_video_data(url):
             # Fallback: Simple HTTP request to get title/description
         try:
             headers = {
-                'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/121.0.0.0 Safari/537.36',
+                'User-Agent': 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/122.0.0.0 Safari/537.36',
                 'Accept-Language': 'en-US,en;q=0.9',
+                'Referer': 'https://www.google.com/',
             }
             response = requests.get(url, headers=headers, timeout=10)
             html = response.text
             
-            # Extract Title
+            # Extract Title - more robust pattern
             title_match = re.search(r'<title>(.*?)</title>', html)
             title_str = title_match.group(1).replace(' - YouTube', '') if title_match else "Untitled"
+            
+            # If title is just "YouTube", it's likely a bot check or home page
+            if title_str.strip() == "YouTube":
+                title_str = "Unknown Recipe"
             
             # Extract Description (Try multiple patterns)
             desc_str = ""
             
-            # Pattern 1: meta description (usually truncated)
-            desc_match = re.search(r'name="description" content="(.*?)"', html)
-            if desc_match:
-                desc_str = desc_match.group(1)
-            
-            # Pattern 2: the "official" description in the JSON blob (more likely to be complete)
-            # We look for "shortDescription":"..." in the script tags
-            json_desc_match = re.search(r'"shortDescription":"(.*?)"', html)
+            # Look for the full description in the JSON blob
+            # Pattern: "shortDescription":"..."
+            json_desc_match = re.search(r'"shortDescription":"(.*?)(?<!\\)"', html)
             if json_desc_match:
-                # Clean up escaped characters
-                desc_str = json_desc_match.group(1).encode().decode('unicode_escape')
+                try:
+                    desc_str = json_desc_match.group(1).encode().decode('unicode_escape')
+                except:
+                    desc_str = json_desc_match.group(1)
             
-            if not desc_str or len(desc_str) < 50:
-                # Try a broader search for anything that looks like a description blob
-                # This is a bit of a hail mary
-                alt_desc = re.search(r'"description":\{"simpleText":"(.*?)"\}', html)
-                if alt_desc:
-                    desc_str = alt_desc.group(1).encode().decode('unicode_escape')
+            if not desc_str or len(desc_str) < 20:
+                # Try the meta tag
+                desc_match = re.search(r'name="description" content="(.*?)"', html)
+                if desc_match:
+                    desc_str = desc_match.group(1)
             
             # Extract Thumbnail
             thumb_match = re.search(r'property="og:image" content="(.*?)"', html)
             thumb_url = thumb_match.group(1) if thumb_match else None
+            
+            # If we still have nothing, we can't do much
+            if not desc_str:
+                print("DEBUG: Fallback failed to find any description text.")
             
             return {
                 'title': title_str,
@@ -138,7 +143,7 @@ def get_video_data(url):
 
 def extract_recipe_with_gemini(video_data):
     """Uses Gemini to extract a structured recipe from video data."""
-    model = genai.GenerativeModel('gemini-1.5-flash')
+    model = genai.GenerativeModel('gemini-1.5-flash-latest')
     
     source_type = video_data.get('source', 'Video')
     title = video_data.get('title', 'Untitled Recipe')
