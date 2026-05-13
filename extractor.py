@@ -85,18 +85,26 @@ def get_video_data(url):
             title_str = title_match.group(1).replace(' - YouTube', '') if title_match else "Untitled"
             
             # Extract Description (Try multiple patterns)
-            desc_str = "Could not extract description."
+            desc_str = ""
             
-            # Pattern 1: Meta tag
+            # Pattern 1: meta description (usually truncated)
             desc_match = re.search(r'name="description" content="(.*?)"', html)
             if desc_match:
                 desc_str = desc_match.group(1)
-            else:
-                # Pattern 2: shortDescription in ytInitialData JSON
-                desc_match = re.search(r'"shortDescription":"(.*?)"', html)
-                if desc_match:
-                    # Clean up escaped characters
-                    desc_str = desc_match.group(1).encode().decode('unicode_escape')
+            
+            # Pattern 2: the "official" description in the JSON blob (more likely to be complete)
+            # We look for "shortDescription":"..." in the script tags
+            json_desc_match = re.search(r'"shortDescription":"(.*?)"', html)
+            if json_desc_match:
+                # Clean up escaped characters
+                desc_str = json_desc_match.group(1).encode().decode('unicode_escape')
+            
+            if not desc_str or len(desc_str) < 50:
+                # Try a broader search for anything that looks like a description blob
+                # This is a bit of a hail mary
+                alt_desc = re.search(r'"description":\{"simpleText":"(.*?)"\}', html)
+                if alt_desc:
+                    desc_str = alt_desc.group(1).encode().decode('unicode_escape')
             
             # Extract Thumbnail
             thumb_match = re.search(r'property="og:image" content="(.*?)"', html)
@@ -126,21 +134,25 @@ def extract_recipe_with_gemini(video_data):
     context = f"Source: {source_type}\nTitle: {title}\n\nDescription/Caption:\n{description}"
     
     prompt = f"""
-    You are a professional chef. Extract the recipe from the following {source_type} content.
+    You are a professional chef. Extract the EXACT recipe details from the provided {source_type} content.
     
     {context}
     
-    IMPORTANT: Return ONLY a valid JSON object with this EXACT structure:
+    IMPORTANT: Return ONLY a valid JSON object. 
+    If the content does not contain actual recipe details (ingredients or steps), return an empty JSON object {{}}.
+    
+    DO NOT HALLUCINATE. If a specific detail (like prep time or an ingredient quantity) is not explicitly mentioned, set it to null or "Not mentioned". Do not make estimates.
+    
+    JSON Structure:
     {{
         "title": "Clear Recipe Name",
         "ingredients": ["1 cup flour", "2 eggs", "..."],
         "instructions": ["Step 1...", "Step 2...", "..."],
-        "prep_time": "10 mins",
-        "cook_time": "20 mins",
-        "servings": "2-4 people"
+        "prep_time": "10 mins or null",
+        "cook_time": "20 mins or null",
+        "servings": "2-4 people or null"
     }}
     
-    If data is missing, make a professional estimate based on the recipe type.
     Do not include any markdown or text outside the JSON.
     """
     
