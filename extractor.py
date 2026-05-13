@@ -106,8 +106,12 @@ def get_video_data(url):
             desc_str = ""
             
             # Look for the full description in the JSON blob
-            # Pattern: "shortDescription":"..."
-            json_desc_match = re.search(r'"shortDescription":"(.*?)(?<!\\)"', html)
+            # Try a very simple pattern first
+            json_desc_match = re.search(r'"shortDescription":"([^"]*)"', html)
+            if not json_desc_match:
+                # Try with escaped quotes
+                json_desc_match = re.search(r'"shortDescription":"(.*?)(?<!\\)"', html)
+            
             if json_desc_match:
                 try:
                     desc_str = json_desc_match.group(1).encode().decode('unicode_escape')
@@ -143,7 +147,7 @@ def get_video_data(url):
 
 def extract_recipe_with_gemini(video_data):
     """Uses Gemini to extract a structured recipe from video data."""
-    model = genai.GenerativeModel('gemini-2.0-flash-001')
+    model = genai.GenerativeModel('gemini-flash-latest')
     
     source_type = video_data.get('source', 'Video')
     title = video_data.get('title', 'Untitled Recipe')
