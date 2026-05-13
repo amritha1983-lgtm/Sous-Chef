@@ -29,12 +29,15 @@ async def extract_recipe(request: ExtractRequest):
     # 1. Fetch video data
     video_data = extractor.get_video_data(request.url)
     if not video_data:
-        raise HTTPException(status_code=400, detail="Could not fetch video data from the provided URL.")
+        print(f"ERROR: Fetching video data failed for {request.url}")
+        raise HTTPException(status_code=400, detail="Could not fetch video data. YouTube might be blocking the request. Please try again in a moment.")
     
     # 2. Extract recipe using Gemini
+    print(f"DEBUG: Successfully fetched video data. Proceeding to Gemini...")
     recipe = extractor.extract_recipe_with_gemini(video_data)
     if not recipe or not recipe.get('title'):
-        raise HTTPException(status_code=404, detail="Could not find a recipe in this video. Please try a different URL or ensure the recipe is in the description.")
+        print(f"ERROR: Gemini extraction failed or returned no recipe for {request.url}")
+        raise HTTPException(status_code=404, detail="Could not find a recipe in this video. Please ensure the recipe is mentioned in the video or description.")
     
     return recipe
 
