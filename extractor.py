@@ -41,6 +41,7 @@ def get_video_data(url):
         'no_warnings': True,
         'user_agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
         'nocheckcertificate': True,
+        'noplaylist': True,
     }
     
     # Only add subtitle options for YouTube
@@ -157,6 +158,9 @@ def extract_recipe_with_gemini(video_data):
     """
     
     try:
+        print(f"DEBUG: Sending to Gemini - Title: {title}")
+        print(f"DEBUG: Description length: {len(description)}")
+        
         response = model.generate_content(prompt)
         content = response.text.strip()
         
