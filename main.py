@@ -33,8 +33,8 @@ async def extract_recipe(request: ExtractRequest):
     
     # 2. Extract recipe using Gemini
     recipe = extractor.extract_recipe_with_gemini(video_data)
-    if not recipe:
-        raise HTTPException(status_code=500, detail="Failed to extract recipe from video content.")
+    if not recipe or not recipe.get('title'):
+        raise HTTPException(status_code=404, detail="Could not find a recipe in this video. Please try a different URL or ensure the recipe is in the description.")
     
     return recipe
 
