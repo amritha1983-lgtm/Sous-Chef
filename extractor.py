@@ -138,7 +138,7 @@ def get_video_data(url):
 
 def extract_recipe_with_gemini(video_data):
     """Uses Gemini to extract a structured recipe from video data."""
-    model = genai.GenerativeModel('gemini-3-flash-preview')
+    model = genai.GenerativeModel('gemini-1.5-flash')
     
     source_type = video_data.get('source', 'Video')
     title = video_data.get('title', 'Untitled Recipe')
